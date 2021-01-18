@@ -354,6 +354,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.tr("Start drawing points"),
             enabled=False,
         )
+        createSuccessivePointMode = action(
+            self.tr("Create Successive Point"),
+            lambda: self.toggleDrawMode(False, createMode="successive_point"),
+            shortcuts["create_successive_point"],
+            "objects",
+            self.tr("Start drawing successive points"),
+            enabled=False,
+        )
         createLineStripMode = action(
             self.tr("Create LineStrip"),
             lambda: self.toggleDrawMode(False, createMode="linestrip"),
@@ -577,6 +585,7 @@ class MainWindow(QtWidgets.QMainWindow):
             createCircleMode=createCircleMode,
             createLineMode=createLineMode,
             createPointMode=createPointMode,
+            createSuccessivePointMode=createSuccessivePointMode,
             createLineStripMode=createLineStripMode,
             zoom=zoom,
             zoomIn=zoomIn,
@@ -610,6 +619,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 createCircleMode,
                 createLineMode,
                 createPointMode,
+                createSuccessivePointMode,
                 createLineStripMode,
                 editMode,
                 edit,
@@ -627,6 +637,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 createCircleMode,
                 createLineMode,
                 createPointMode,
+                createSuccessivePointMode,
                 createLineStripMode,
                 editMode,
                 brightnessContrast,
@@ -824,6 +835,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.actions.createCircleMode,
             self.actions.createLineMode,
             self.actions.createPointMode,
+            self.actions.createSuccessivePointMode,
             self.actions.createLineStripMode,
             self.actions.editMode,
         )
@@ -853,6 +865,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.actions.createCircleMode.setEnabled(True)
         self.actions.createLineMode.setEnabled(True)
         self.actions.createPointMode.setEnabled(True)
+        self.actions.createSuccessivePointMode.setEnabled(True)
         self.actions.createLineStripMode.setEnabled(True)
         title = __appname__
         if self.filename is not None:
@@ -928,13 +941,19 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def toggleDrawMode(self, edit=True, createMode="polygon"):
         self.canvas.setEditing(edit)
-        self.canvas.createMode = createMode
+        if createMode == "successive_point":
+            self.canvas.createMode = "point"
+            self.canvas.createModeExt = "successive"
+        else:
+            self.canvas.createMode = createMode
+            self.canvas.createModeExt = None
         if edit:
             self.actions.createMode.setEnabled(True)
             self.actions.createRectangleMode.setEnabled(True)
             self.actions.createCircleMode.setEnabled(True)
             self.actions.createLineMode.setEnabled(True)
             self.actions.createPointMode.setEnabled(True)
+            self.actions.createSuccessivePointMode.setEnabled(True)
             self.actions.createLineStripMode.setEnabled(True)
         else:
             if createMode == "polygon":
@@ -943,6 +962,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions.createCircleMode.setEnabled(True)
                 self.actions.createLineMode.setEnabled(True)
                 self.actions.createPointMode.setEnabled(True)
+                self.actions.createSuccessivePointMode.setEnabled(True)
                 self.actions.createLineStripMode.setEnabled(True)
             elif createMode == "rectangle":
                 self.actions.createMode.setEnabled(True)
@@ -950,6 +970,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions.createCircleMode.setEnabled(True)
                 self.actions.createLineMode.setEnabled(True)
                 self.actions.createPointMode.setEnabled(True)
+                self.actions.createSuccessivePointMode.setEnabled(True)
                 self.actions.createLineStripMode.setEnabled(True)
             elif createMode == "line":
                 self.actions.createMode.setEnabled(True)
@@ -957,13 +978,19 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions.createCircleMode.setEnabled(True)
                 self.actions.createLineMode.setEnabled(False)
                 self.actions.createPointMode.setEnabled(True)
+                self.actions.createSuccessivePointMode.setEnabled(True)
                 self.actions.createLineStripMode.setEnabled(True)
-            elif createMode == "point":
+            elif (createMode == "point") or (createMode == "successive_point"):
                 self.actions.createMode.setEnabled(True)
                 self.actions.createRectangleMode.setEnabled(True)
                 self.actions.createCircleMode.setEnabled(True)
                 self.actions.createLineMode.setEnabled(True)
-                self.actions.createPointMode.setEnabled(False)
+                if createMode == "point":
+                    self.actions.createPointMode.setEnabled(False)
+                    self.actions.createSuccessivePointMode.setEnabled(True)
+                elif createMode == "successive_point":
+                    self.actions.createPointMode.setEnabled(True)
+                    self.actions.createSuccessivePointMode.setEnabled(False)
                 self.actions.createLineStripMode.setEnabled(True)
             elif createMode == "circle":
                 self.actions.createMode.setEnabled(True)
@@ -971,6 +998,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions.createCircleMode.setEnabled(False)
                 self.actions.createLineMode.setEnabled(True)
                 self.actions.createPointMode.setEnabled(True)
+                self.actions.createSuccessivePointMode.setEnabled(True)
                 self.actions.createLineStripMode.setEnabled(True)
             elif createMode == "linestrip":
                 self.actions.createMode.setEnabled(True)
@@ -978,6 +1006,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self.actions.createCircleMode.setEnabled(True)
                 self.actions.createLineMode.setEnabled(True)
                 self.actions.createPointMode.setEnabled(True)
+                self.actions.createSuccessivePointMode.setEnabled(True)
                 self.actions.createLineStripMode.setEnabled(False)
             else:
                 raise ValueError("Unsupported createMode: %s" % createMode)
@@ -1282,6 +1311,42 @@ class MainWindow(QtWidgets.QMainWindow):
 
     # Callback functions:
 
+    def findUnusedLabelRow(self, text=None, circular=False):
+        candidations = [self.uniqLabelList.item(i).data(Qt.UserRole) for i in range(self.uniqLabelList.count())]
+        num_labels = len(candidations)
+        switch_on = True
+        if circular and (text is not None):
+            candidations.extend(candidations)
+            switch_on = False
+        used = [self.labelList.model().item(i).data(Qt.UserRole).label for i in range(len(self.labelList))]
+        found = None
+        for i in range(len(candidations)):
+            if circular and (text is not None):
+                if candidations[i] == text:
+                    switch_on = True
+            if (not circular) and (text is not None):
+                if candidations[i] != text:
+                    continue
+            if not switch_on:
+                continue
+            if candidations[i] not in used:
+                found = i % num_labels
+                break
+        return found
+
+    def selectUnusedLabel(self):
+        try:
+            if (self.canvas.createModeExt == 'successive') and (self.canvas.createMode == 'point'):
+                found = self.findUnusedLabelRow()
+                if found is not None:
+                    selected_item = self.uniqLabelList.item(found)
+                    selected_item.setSelected(True)
+                    self.uniqLabelList.setCurrentItem(selected_item)
+                    self.uniqLabelList.setCurrentRow(found)
+        except Exception as e:
+            print(e)
+
+
     def newShape(self):
         """Pop-up and give focus to the label editor.
 
@@ -1290,10 +1355,27 @@ class MainWindow(QtWidgets.QMainWindow):
         items = self.uniqLabelList.selectedItems()
         text = None
         if items:
-            text = items[0].data(Qt.UserRole)
+            selected_item = items[0]
+            text = selected_item.data(Qt.UserRole)
         flags = {}
         group_id = None
-        if self._config["display_label_popup"] or not text:
+
+        if (self.canvas.createModeExt == 'successive') and (self.canvas.createMode == 'point'):
+            found = self.findUnusedLabelRow(text=text)
+            if found is None:
+                text = None
+            else:
+                if not items:
+                    # Find the first unused label item
+                    selected_item = self.uniqLabelList.item(found)
+                    selected_item.setSelected(True)
+                    self.uniqLabelList.setCurrentItem(selected_item)
+                    self.uniqLabelList.setCurrentRow(found)
+                    text = selected_item.data(Qt.UserRole)
+                else:
+                    # There should be somee text already
+                    pass
+        elif self._config["display_label_popup"] or not text:
             previous_text = self.labelDialog.edit.text()
             text, flags, group_id = self.labelDialog.popUp(text)
             if not text:
@@ -1306,8 +1388,9 @@ class MainWindow(QtWidgets.QMainWindow):
                     text, self._config["validate_label"]
                 ),
             )
-            text = ""
-        if text:
+            text = None
+
+        if text is not None:
             self.labelList.clearSelection()
             shape = self.canvas.setLastLabel(text, flags)
             shape.group_id = group_id
@@ -1319,6 +1402,21 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self.canvas.undoLastLine()
             self.canvas.shapesBackups.pop()
+
+        if (self.canvas.createModeExt == 'successive') and (self.canvas.createMode == 'point'):
+            next_row = self.findUnusedLabelRow(text=text, circular=True)
+            if next_row is not None:
+                next_item = self.uniqLabelList.item(next_row)
+                selected_item.setSelected(False)
+                next_item.setSelected(True)
+                self.uniqLabelList.setCurrentItem(next_item)
+                self.uniqLabelList.setCurrentRow(next_row)
+            else:
+                self.labelList.clearSelection()
+                self.actions.editMode.setEnabled(True)
+                self.actions.undoLastPoint.setEnabled(False)
+                self.actions.undo.setEnabled(True)
+
 
     def scrollRequest(self, delta, orientation):
         units = -delta * 0.1  # natural scroll
@@ -1536,6 +1634,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.addRecentFile(self.filename)
         self.toggleActions(True)
         self.status(self.tr("Loaded %s") % osp.basename(str(filename)))
+        self.selectUnusedLabel()
         return True
 
     def resizeEvent(self, event):
